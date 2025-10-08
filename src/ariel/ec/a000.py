@@ -81,7 +81,6 @@ class IntegersGenerator:
         )
         return cast("Integers", generated_values.astype(int).tolist())
 
-
 class IntegerMutator:
     @staticmethod
     def random_swap(
@@ -138,6 +137,44 @@ class IntegerMutator:
         mutation_mask = mutator * sub_mask * do_mask
         new_genotype = ind_arr + mutation_mask
         return cast("Integers", new_genotype.astype(int).tolist())
+    
+class FloatMutator:
+    @staticmethod
+    def float_creep(
+        individual: Floats,
+        span: float,
+        mutation_probability: float,
+        negatives: bool = True,
+    ) -> Floats:
+        # Prep
+        ind_arr = np.array(individual)
+        shape = ind_arr.shape
+
+        # Generate mutation values
+        mutator = RNG.uniform(
+            low=0,
+            high=span,
+            size=shape,
+        )
+
+        # Include negative mutations
+        if negatives:
+            sub_mask = RNG.choice(
+                [-1, 1],
+                size=shape,
+            )
+        else:
+            sub_mask = np.ones(shape)
+
+        # Determine which positions to mutate
+        do_mask = RNG.choice(
+            [1, 0],
+            size=shape,
+            p=[mutation_probability, 1 - mutation_probability],
+        )
+        mutation_mask = mutator * sub_mask * do_mask
+        new_genotype = ind_arr + mutation_mask
+        return cast("Floats", new_genotype.astype(float).tolist())
                     
 def main() -> None:
     """Entry point."""

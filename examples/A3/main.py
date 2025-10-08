@@ -27,6 +27,8 @@ from ariel.utils.runners import simple_runner
 from ariel.utils.tracker import Tracker
 from ariel.utils.video_recorder import VideoRecorder
 
+from utils import show_xpos_history
+
 # Type Checking
 if TYPE_CHECKING:
     from networkx import DiGraph
@@ -224,7 +226,7 @@ def main() -> None:
 
     experiment(robot=core, controller=ctrl, mode="launcher")
 
-    show_xpos_history(tracker.history["xpos"][0])
+    show_xpos_history(DATA, SPAWN_POS, tracker.history["xpos"][0])
 
     fitness = fitness_function(tracker.history["xpos"][0])
     msg = f"Fitness of generated robot: {fitness}"
