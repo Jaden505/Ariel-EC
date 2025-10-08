@@ -1,6 +1,6 @@
 # Standard libraries
 import random
-from collections.abc import cast
+from collections.abc import cast, Callable
 import numpy as np
 
 # Local libraries
@@ -64,7 +64,7 @@ def mutation(population: Population) -> Population:
     """Swap mutation"""
     for ind in population:
         if ind.tags.get("mut", False):
-            genes = cast("list[int]", ind.genotype)
+            genes = cast("list[float]", ind.genotype)
             mutated = FloatMutator.float_creep(
                 individual=genes,
                 span=1,
@@ -75,7 +75,7 @@ def mutation(population: Population) -> Population:
     return population
 
 
-def evaluate(population: Population) -> Population:
+def evaluate(population: Population, fitness_func: Callable[[list[float]], float]) -> Population:
     """Evaluate individuals that require evaluation"""
     for ind in population:
         if ind.requires_eval:
@@ -145,6 +145,3 @@ config.target_population_size = lambda_
 config.num_of_generations = 100
 config.db_handling = "delete"
 
-if __name__ == "__main__":
-    best = solve_problem(quiet=False)
-    print("Best individual:", best)
