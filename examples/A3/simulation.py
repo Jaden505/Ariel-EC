@@ -65,29 +65,33 @@ def fitness_function(history: list[float]) -> float:
 def nn_controller(
     model: mj.MjModel,
     data: mj.MjData,
+    control_weights: list[float] = None,
 ) -> npt.NDArray[np.float64]:
-    # Simple 3-layer neural network
     input_size = len(data.qpos)
     hidden_size = 8
     output_size = model.nu
 
-    # Initialize the networks weights randomly
-    # Normally, you would use the genes of an individual as the weights,
-    # Here we set them randomly for simplicity.
-    w1 = RNG.normal(loc=0.0138, scale=0.5, size=(input_size, hidden_size))
-    w2 = RNG.normal(loc=0.0138, scale=0.5, size=(hidden_size, hidden_size))
-    w3 = RNG.normal(loc=0.0138, scale=0.5, size=(hidden_size, output_size))
+    if control_weights:
+        total_params = input_size * hidden_size + hidden_size * hidden_size + hidden_size * output_size
+        if len(control_weights) != total_params:
+            raise ValueError(f"Controller genotype length mismatch. Expected {total_params}, got {len(control_weights)}")
 
-    # Get inputs, in this case the positions of the actuator motors (hinges)
+        w1_end = input_size * hidden_size
+        w2_end = w1_end + hidden_size * hidden_size
+
+        w1 = np.array(control_weights[:w1_end]).reshape((input_size, hidden_size))
+        w2 = np.array(control_weights[w1_end:w2_end]).reshape((hidden_size, hidden_size))
+        w3 = np.array(control_weights[w2_end:]).reshape((hidden_size, output_size))
+    else:
+        w1 = RNG.normal(0, 0.5, size=(input_size, hidden_size))
+        w2 = RNG.normal(0, 0.5, size=(hidden_size, hidden_size))
+        w3 = RNG.normal(0, 0.5, size=(hidden_size, output_size))
+
     inputs = data.qpos
-
-    # Run the inputs through the lays of the network.
     layer1 = np.tanh(np.dot(inputs, w1))
     layer2 = np.tanh(np.dot(layer1, w2))
     outputs = np.tanh(np.dot(layer2, w3))
-
-    # Scale the outputs
-    return outputs * np.pi
+    return np.clip(outputs * np.pi, -np.pi / 2, np.pi / 2)
 
 
 def experiment(
@@ -95,11 +99,12 @@ def experiment(
     controller: Controller,
     duration: int = 15,
     mode: ViewerTypes = "viewer",
+    control_weights: list[float] = None,
 ) -> None:
     """Run the simulation with random movements."""
     # ==================================================================== #
     # Initialise controller to controller to None, always in the beginning.
-    mj.set_mjcb_control(None)  # DO NOT REMOVE
+    mj.set_mjcb_control(None)  # DO NOT REMOVE 
 
     # Initialise world
     # Import environments from ariel.simulation.environments
@@ -124,7 +129,7 @@ def experiment(
     # Set the control callback function
     # This is called every time step to get the next action.
     args: list[Any] = []  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
-    kwargs: dict[Any, Any] = {}  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
+    kwargs: dict[Any, Any] = {"control_weights": control_weights}  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
 
     mj.set_mjcb_control(
         lambda m, d: controller.set_control(m, d, *args, **kwargs),
@@ -169,9 +174,42 @@ def experiment(
                 data=data,
             )
     # ==================================================================== #
+    
+    
+def evolve_simulation(genotype, controller) -> float:
+    """Run simulation with a given genotype and controller."""
+    nde = NeuralDevelopmentalEncoding(number_of_modules=NUM_OF_MODULES)
+    p_matrices = nde.forward(np.array(genotype['morphology']))
+
+    # Decode the high-probability graph
+    hpd = HighProbabilityDecoder(NUM_OF_MODULES)
+    robot_graph: DiGraph[Any] = hpd.probability_matrices_to_graph(
+        p_matrices[0],
+        p_matrices[1],
+        p_matrices[2],
+    )
+
+    # Print all nodes
+    core = construct_mjspec_from_graph(robot_graph)
+
+    mujoco_type_to_find = mj.mjtObj.mjOBJ_GEOM
+    name_to_bind = "core"
+    tracker = Tracker(
+        mujoco_obj_to_find=mujoco_type_to_find,
+        name_to_bind=name_to_bind,
+    )
+
+    # Simulate the robot
+    controller.tracker = tracker
+
+    experiment(robot=core, controller=controller, mode="simple", control_weights=genotype['controller'])
+
+    fitness = fitness_function(tracker.history["xpos"][0])
+    print(f"Fitness: {fitness}")
+    return fitness
 
 
-def main() -> None:
+def random_simulation() -> None:
     """Entry point."""
     # ? ------------------------------------------------------------------ #
     genotype_size = 64

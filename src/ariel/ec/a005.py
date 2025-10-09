@@ -59,6 +59,40 @@ class Crossover:
         child1 = child1.reshape(parent_i_arr_shape).astype(int).tolist()
         child2 = child2.reshape(parent_j_arr_shape).astype(int).tolist()
         return child1, child2
+    
+    @staticmethod
+    def blx_alpha(
+        parent_i: JSONIterable,
+        parent_j: JSONIterable,
+        alpha: float = 0.5,
+    ) -> tuple[JSONIterable, JSONIterable]:
+        # Prep
+        parent_i_arr_shape = np.array(parent_i).shape
+        parent_j_arr_shape = np.array(parent_j).shape
+        parent_i_arr = np.array(parent_i).flatten().copy()
+        parent_j_arr = np.array(parent_j).flatten().copy()
+
+        # Ensure parents have the same length
+        if parent_i_arr_shape != parent_j_arr_shape:
+            msg = "Parents must have the same length"
+            raise ValueError(msg)
+
+        # Perform BLX-alpha crossover
+        child1 = []
+        child2 = []
+        for gi, gj in zip(parent_i_arr, parent_j_arr):
+            c_min = min(gi, gj)
+            c_max = max(gi, gj)
+            I = c_max - c_min
+            lower_bound = c_min - alpha * I
+            upper_bound = c_max + alpha * I
+            child1.append(RNG.uniform(lower_bound, upper_bound))
+            child2.append(RNG.uniform(lower_bound, upper_bound))
+
+        # Correct final shape
+        child1 = np.array(child1).reshape(parent_i_arr_shape).tolist()
+        child2 = np.array(child2).reshape(parent_j_arr_shape).tolist()
+        return child1, child2
 
 
 def main() -> None:

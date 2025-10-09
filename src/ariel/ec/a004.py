@@ -111,9 +111,12 @@ class AbstractEA:
 @dataclass
 class EAStep:
     name: str
-    operation: Callable[[Population], Population]
+    operation: Callable[[Population, ...], Population]
+    params: dict = None
 
     def __call__(self, population: Population) -> Population:
+        if self.params:
+            return self.operation(population, **self.params)
         return self.operation(population)
 
 
