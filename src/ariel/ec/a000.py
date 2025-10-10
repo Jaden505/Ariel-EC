@@ -157,7 +157,6 @@ class FloatMutator:
             size=shape,
         )
 
-        # Include negative mutations
         if negatives:
             sub_mask = RNG.choice(
                 [-1, 1],

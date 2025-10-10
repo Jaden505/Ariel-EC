@@ -269,6 +269,7 @@ class EA(AbstractEA):
         self.fetch_population()
         for operation in self.operations:
             self.population = operation(self.population)
+            
         self.commit_population()
 
     def run(self) -> None:
@@ -276,7 +277,17 @@ class EA(AbstractEA):
             range(self.num_of_generations),
             description="Running EA:",
         ):
+            
             self.step()
+            
+            best = self.get_solution('best', only_alive=True)
+            self.console.log(
+                f"Generation {self.current_generation} completed."
+                f"Best fitness: {best.fitness}"
+                f"Time of Birth: {best.time_of_birth}, Time of Death: {best.time_of_death}"
+                f"Alive: {best.alive}"
+            )
+            
         self.console.rule("[green]EA Finished Running")
 
 

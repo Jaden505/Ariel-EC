@@ -8,22 +8,30 @@ def parent_selection(population: Population, mu:int) -> Population:
     random.shuffle(population)
     selected = population[:mu]
     
-    for ind in selected:
-        ind.tags["ps"] = True  # Mark as selected for parenthood
-    
-    return selected
+    for ind in population:
+        if ind in selected:
+            ind.tags["ps"] = True
+        else:
+            ind.tags["ps"] = False
+                                                
+    return population
 
 
-def survivor_selection(population: Population, mu:int) -> Population:
-    """Elitism"""
-    non_parents = [ind for ind in population if not ind.tags.get("ps", False)]
-    sorted_population = sorted(non_parents, key=lambda ind: ind.fitness, reverse=True)
-    
-    # Select the top mu individuals
+def survivor_selection(population: Population, mu: int) -> Population:
+    """(μ, λ) survivor selection — only offspring survive."""
+    offspring = [ind for ind in population if not ind.tags.get("ps", False)]
+
+    sorted_population = sorted(offspring, key=lambda ind: ind.fitness, reverse=True)
+
+    # Select top μ survivors
     selected = sorted_population[:mu]
-    
-    # Reset tags for the next generation
+    not_selected = sorted_population[mu:]
+
     for ind in selected:
+        ind.alive = True
         ind.tags = {"ps": False, "mut": False}
-    
-    return selected
+
+    for ind in not_selected:
+        ind.alive = False
+
+    return population

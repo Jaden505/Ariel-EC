@@ -1,84 +1,83 @@
-# Standard libraries
-from typing import TYPE_CHECKING, cast
+from typing import cast
 import numpy as np
-
-# Local libraries
 from ariel.ec.a001 import Individual
-from ariel.ec.a005 import Crossover
 from ariel.ec.a000 import FloatMutator
+from ariel.ec.a005 import Crossover
 
 type Population = list[Individual]
 
-def crossover(population: Population, RNG: np.random.Generator, 
-              lambda_: float, alpha: float, evolve_morphology: bool) -> Population:
-    """BLX-alpha crossover creates lambda_ offspring"""
+# --- CREATE ---
+def create_individual(RNG: np.random.Generator, vector_length: int) -> Individual:
+    genotype = [
+        RNG.uniform(0, 1, size=vector_length).astype(np.float32).tolist()
+        for _ in range(3)
+    ]
+    ind = Individual()
+    ind.genotype = genotype  # list[list[float]]
+    ind.tags = {"ps": False, "mut": False}
+    ind.requires_eval = True
+    return ind
+
+# --- CROSSOVER ---
+def crossover(population: Population,
+              RNG: np.random.Generator,
+              lambda_: int,
+              alpha: float) -> Population:
     parents = [ind for ind in population if ind.tags.get("ps", False)]
     offspring = []
 
     while len(offspring) < lambda_:
         p1, p2 = RNG.choice(parents, size=2, replace=False)
-        p1g = p1.genotype
-        p2g = p2.genotype
+        p1g = cast(list[list[float]], p1.genotype)
+        p2g = cast(list[list[float]], p2.genotype)
 
-        # BLX crossover for each morphology vector
-        if evolve_morphology:
-            child_morph = [
-                Crossover.blx_alpha(a, b, alpha=alpha)[0]
-                for a, b in zip(p1g["morphology"], p2g["morphology"])
-            ]
-        else:
-            child_morph = cast(list, p1g["morphology"])  # No crossover, just copy parent 1
-
-        # BLX crossover for controller
-        child_ctrl, _ = Crossover.blx_alpha(p1g["controller"], p2g["controller"], alpha=alpha)
+        child_vecs = [
+            Crossover.blx_alpha(np.array(v1), np.array(v2), alpha=alpha)[0]
+            for v1, v2 in zip(p1g, p2g)
+        ]
 
         child = Individual()
-        child.genotype = {"morphology": child_morph, "controller": child_ctrl}
-        child.tags = {"ps": False, "mut": True}
+        child.genotype = child_vecs
+        child.tags = {"ps": False, "mut": True} 
         child.requires_eval = True
-
         offspring.append(child)
-        
-    return offspring
 
+    return population + offspring
 
-
-def mutation(population: Population, mutation_probability: float, evolve_morphology: bool = False) -> Population:
-    """Float creep mutation"""
+# --- MUTATION ---
+def mutation(population: Population,
+             mutation_probability: float) -> Population:
     for ind in population:
-        if ind.tags.get("mut", False):
-            geno = ind.genotype
-
-            if evolve_morphology:
-                geno["morphology"] = [
-                    FloatMutator.float_creep(v, span=1, mutation_probability=mutation_probability)
-                    for v in geno["morphology"]
-                ]
-
-            geno["controller"] = FloatMutator.float_creep(
-                geno["controller"],
-                span=1,
-                mutation_probability=mutation_probability
-            )
+        if ind.tags.get("mut", False) and not ind.tags.get("ps", False): # Only mutate offspring
+            genotype = cast(list[list[float]], ind.genotype)
+            mutated = [
+                FloatMutator.float_creep(np.array(vec), span=1.0, mutation_probability=mutation_probability)
+                for vec in genotype
+            ]
+            ind.genotype = mutated
+            ind.tags["mut"] = False  # Reset mutation tag
     return population
 
 
+def mutation_crossover(population: Population, lambda_: int, mutation_probability: float, RNG: np.random.Generator) -> Population:
+    """Make offspring using mutation"""
+    parents = [ind for ind in population if ind.tags.get("ps", False)]
+    offspring = []
 
-def create_individual(RNG: np.random.Generator, controller_size: int, best_individual=None) -> Individual:
-    input_size = 16  # Replace with actual or dynamic len(data.qpos)
-    hidden_size = 8
-    output_size = 8  # Replace with actual or dynamic model.nu
+    while len(offspring) < lambda_:
+        p = RNG.choice(parents)
+        p_genotype = cast(list[list[float]], p.genotype)
 
-    w1 = RNG.normal(0, 0.5, size=(input_size, hidden_size))
-    w2 = RNG.normal(0, 0.5, size=(hidden_size, hidden_size))
-    w3 = RNG.normal(0, 0.5, size=(hidden_size, output_size))
+        # Mutate
+        mutated_vecs = [
+            FloatMutator.float_creep(np.array(vec), span=0.1, mutation_probability=mutation_probability)
+            for vec in p_genotype
+        ]
 
-    ind = Individual()
-    ind.genotype = {
-        "morphology": [RNG.uniform(0, 1, size=64).tolist() for _ in range(3)],
-        "controller": np.concatenate([w1.flatten(), w2.flatten(), w3.flatten()]).tolist(),
-    }
-    ind.tags = {"ps": False, "mut": False}
-    ind.requires_eval = True
-    return ind
+        child = Individual()
+        child.genotype = mutated_vecs
+        child.tags = {"ps": False, "mut": True} 
+        child.requires_eval = True
+        offspring.append(child)
 
+    return offspring

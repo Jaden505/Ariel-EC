@@ -2,6 +2,9 @@
 import matplotlib.pyplot as plt
 import mujoco as mj
 import numpy as np
+import networkx as nx
+from pathlib import Path
+import json
 
 # Local libraries
 from ariel.simulation.environments import OlympicArena
