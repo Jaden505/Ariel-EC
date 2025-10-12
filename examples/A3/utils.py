@@ -75,3 +75,19 @@ def show_xpos_history(DATA: str, SPAWN_POS: list[float], history: list[float]) -
 
     # Show results
     plt.show()
+
+
+def smooth_softmax(x: np.ndarray, temperature: float = 0.3) -> np.ndarray:
+    x = x / temperature
+    e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
+    return e_x / np.sum(e_x, axis=-1, keepdims=True)
+
+
+def load_graph_from_json(path: str | Path):
+    import json, networkx as nx
+    with open(path, "r") as f:
+        data = json.load(f)
+    if "edges" in data and "links" not in data:
+        data["links"] = data.pop("edges")
+    return nx.node_link_graph(data)
+

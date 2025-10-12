@@ -8,8 +8,6 @@ import mujoco as mj
 import numpy as np
 import numpy.typing as npt
 from mujoco import viewer
-import json
-from networkx import node_link_graph
 
 # Local libraries
 from ariel import console
@@ -28,7 +26,7 @@ from ariel.utils.runners import simple_runner
 from ariel.utils.tracker import Tracker
 from ariel.utils.video_recorder import VideoRecorder
 
-from utils import show_xpos_history
+from utils import show_xpos_history, load_graph_from_json
 
 # Type Checking
 if TYPE_CHECKING:
@@ -63,49 +61,25 @@ def fitness_function(history: list[float]) -> float:
     )
     return -cartesian_distance
 
-def fitness_anydirection_function(history: list[float]) -> float:
-    # far away from origin
-    xc, yc, zc = history[-1]
-    xs, ys, zs = SPAWN_POS
-    distance = np.sqrt(
-        (xc - xs) ** 2 + (yc - ys) ** 2 + (zc - zs) ** 2,
-    )
-    return distance 
 
-
-# def nn_controller(
-#     model: mj.MjModel,
-#     data: mj.MjData,
-# ) -> npt.NDArray[np.float64]:
-#     input_size = len(data.qpos)
-#     hidden_size = 8
-#     output_size = model.nu
-
-#     w1 = RNG.normal(0, 0.5, size=(input_size, hidden_size))
-#     w2 = RNG.normal(0, 0.5, size=(hidden_size, hidden_size))
-#     w3 = RNG.normal(0, 0.5, size=(hidden_size, output_size))
-
-#     inputs = data.qpos
-#     layer1 = np.tanh(np.dot(inputs, w1))
-#     layer2 = np.tanh(np.dot(layer1, w2))
-#     outputs = np.tanh(np.dot(layer2, w3))
-#     return np.clip(outputs * np.pi, -np.pi / 2, np.pi / 2)
-
-def nn_controller(model, data, t=None) -> np.ndarray:
-    freq = 1.5  # Hz
-    amp = 0.5   # Max torque as fraction of joint range
-    phase_offset = np.linspace(0, 2 * np.pi, model.nu, endpoint=False)
-
-    if t is None:
-        t = data.time
-
-    action = amp * np.sin(2 * np.pi * freq * t + phase_offset)
-    return np.clip(action * np.pi, -np.pi/2, np.pi/2)
+def nn_controller(
+    model: mj.MjModel,
+    data: mj.MjData,
+    control_genotype: list[list[float]],
+) -> npt.NDArray[np.float64]:
+    w1, w2, w3 = weights
+    
+    inputs = data.qpos
+    layer1 = np.tanh(np.dot(inputs, w1))
+    layer2 = np.tanh(np.dot(layer1, w2))
+    outputs = np.tanh(np.dot(layer2, w3))
+    return np.clip(outputs * np.pi, -np.pi / 2, np.pi / 2)
 
 
 def experiment(
     robot: Any,
     controller: Controller,
+    control_genotype: list[list[float]] = None,
     duration: int = 15,
     mode: ViewerTypes = "viewer",
 ) -> None:
@@ -136,7 +110,7 @@ def experiment(
 
     # Set the control callback function
     # This is called every time step to get the next action.
-    args: list[Any] = []  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
+    args: list[Any] = [control_genotype]  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
     kwargs: dict[Any, Any] = {}  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
 
     mj.set_mjcb_control(
@@ -183,11 +157,13 @@ def experiment(
             )
     # ==================================================================== #
     
-    
-def evolve_simulation(genotype, controller) -> float:
+
+def evolve_simulation(nde: NeuralDevelopmentalEncoding, 
+                        body_genotype list[list[float]], 
+                        control_genotype: list[list[float]]
+                      ) -> float:
     """Run simulation with a given genotype and controller."""
-    nde = NeuralDevelopmentalEncoding(number_of_modules=NUM_OF_MODULES)
-    p_matrices = nde.forward(np.array(genotype))
+    p_matrices = nde.forward(body_genotype) # Get the probability matrices
 
     # Decode the high-probability graph
     hpd = HighProbabilityDecoder(NUM_OF_MODULES)
@@ -208,18 +184,18 @@ def evolve_simulation(genotype, controller) -> float:
     )
 
     # Simulate the robot
-    controller.tracker = tracker
+    ctrl = Controller(
+        controller_callback_function=nn_controller,
+        # controller_callback_function=random_move,
+        tracker=tracker,
+    )
+    
+    ctrl.tracker = tracker
 
-    experiment(robot=core, controller=controller, mode="simple", duration=20)
+    experiment(robot=core, controller=ctrl, mode="simple", duration=10, control_genotype=control_genotype)
 
     fitness = fitness_function(tracker.history["xpos"][0])
     print(f"Fitness: {fitness}")
-    
-    if fitness > highest_fitness:
-        save_graph_as_json(
-            robot_graph,
-            DATA / "best_robot_graph.json",
-        )
     
     return fitness
 
@@ -249,7 +225,7 @@ def random_simulation() -> None:
         p_matrices[2],
     )
     
-    robot_graph = load_graph_from_json(DATA / "best_robot_graph.json")
+    # robot_graph = load_graph_from_json(DATA / "best_robot_graph.json")
 
     # ? ------------------------------------------------------------------ #
     # Save the graph to a file
@@ -285,15 +261,6 @@ def random_simulation() -> None:
     fitness = fitness_function(tracker.history["xpos"][0])
     msg = f"Fitness of generated robot: {fitness}"
     console.log(msg)
-
-
-def load_graph_from_json(path: str | Path):
-    import json, networkx as nx
-    with open(path, "r") as f:
-        data = json.load(f)
-    if "edges" in data and "links" not in data:
-        data["links"] = data.pop("edges")
-    return nx.node_link_graph(data)
 
 
 if __name__ == "__main__":
