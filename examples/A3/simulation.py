@@ -26,6 +26,8 @@ from ariel.utils.runners import simple_runner
 from ariel.utils.tracker import Tracker
 from ariel.utils.video_recorder import VideoRecorder
 
+from neural_decoder import ControllerDecoder
+
 from utils import show_xpos_history, load_graph_from_json
 
 # Type Checking
@@ -65,21 +67,24 @@ def fitness_function(history: list[float]) -> float:
 def nn_controller(
     model: mj.MjModel,
     data: mj.MjData,
-    control_genotype: list[list[float]],
+    control_genotype: list[list[float]], # weights
+    control_decoder: ControllerDecoder,
 ) -> npt.NDArray[np.float64]:
-    w1, w2, w3 = weights
+    w1, w2, w3 = control_decoder.decode(control_genotype, input_size=len(data.qpos), output_size=model.nu)
     
     inputs = data.qpos
     layer1 = np.tanh(np.dot(inputs, w1))
     layer2 = np.tanh(np.dot(layer1, w2))
     outputs = np.tanh(np.dot(layer2, w3))
+    
     return np.clip(outputs * np.pi, -np.pi / 2, np.pi / 2)
 
 
 def experiment(
     robot: Any,
     controller: Controller,
-    control_genotype: list[list[float]] = None,
+    control_decoder: ControllerDecoder,
+    control_genotype: list[list[float]],
     duration: int = 15,
     mode: ViewerTypes = "viewer",
 ) -> None:
@@ -110,7 +115,7 @@ def experiment(
 
     # Set the control callback function
     # This is called every time step to get the next action.
-    args: list[Any] = [control_genotype]  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
+    args: list[Any] = [control_genotype, control_decoder]  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
     kwargs: dict[Any, Any] = {}  # IF YOU NEED MORE ARGUMENTS ADD THEM HERE!
 
     mj.set_mjcb_control(
@@ -159,11 +164,12 @@ def experiment(
     
 
 def evolve_simulation(nde: NeuralDevelopmentalEncoding, 
-                        body_genotype list[list[float]], 
-                        control_genotype: list[list[float]]
+                        body_genotype: list[list[float]],
+                        control_genotype: list[list[float]],
+                        control_decoder: ControllerDecoder
                       ) -> float:
     """Run simulation with a given genotype and controller."""
-    p_matrices = nde.forward(body_genotype) # Get the probability matrices
+    p_matrices = nde.forward(np.array(body_genotype)) # Get the probability matrices
 
     # Decode the high-probability graph
     hpd = HighProbabilityDecoder(NUM_OF_MODULES)
@@ -186,13 +192,12 @@ def evolve_simulation(nde: NeuralDevelopmentalEncoding,
     # Simulate the robot
     ctrl = Controller(
         controller_callback_function=nn_controller,
-        # controller_callback_function=random_move,
         tracker=tracker,
     )
     
     ctrl.tracker = tracker
 
-    experiment(robot=core, controller=ctrl, mode="simple", duration=10, control_genotype=control_genotype)
+    experiment(robot=core, controller=ctrl, mode="simple", duration=10, control_genotype=control_genotype, control_decoder=control_decoder)
 
     fitness = fitness_function(tracker.history["xpos"][0])
     print(f"Fitness: {fitness}")
@@ -215,7 +220,7 @@ def random_simulation() -> None:
     ]
 
     nde = NeuralDevelopmentalEncoding(number_of_modules=NUM_OF_MODULES)
-    p_matrices = nde.forward(genotype)
+    p_matrices = nde.forward(genotype) 
 
     # Decode the high-probability graph
     hpd = HighProbabilityDecoder(NUM_OF_MODULES)

@@ -11,22 +11,26 @@ from evolution.selection import parent_selection, survivor_selection
 
 from simulation import NUM_OF_MODULES
 from ariel.ec.genotypes.nde import NeuralDevelopmentalEncoding
+from neural_decoder import ControllerDecoder
 
 type Population = list[Individual]
 config = EASettings()
 
+# CONSTANT STATICS
 SEED = 42
 RNG = np.random.default_rng(SEED)
 MUTATION_PROBABILITY = 0.1
 N_GENERATIONS = 10
 N_ITERATIONS = 10
 
-BODY_VECTOR_SIZE = 64 
-CONTROLLER_VECTOR_SIZE = NUM_OF_MODULES
+LATENT_SIZE = 8
+CONTROLLER_VECTOR_SIZE = (NUM_OF_MODULES * LATENT_SIZE) 
+BODY_VECTOR_SIZE = (3, 64)
 
+# Evolution parameters
 lambda_ = 18 # Offspring_size
 mu = 5 # Parent_size
-alpha = 0.5 # BLX-alpha
+alpha = 0.2 # BLX-alpha
 
 # Configuration
 config.is_maximisation = False  
@@ -34,15 +38,15 @@ config.target_population_size = lambda_
 config.num_of_generations = N_GENERATIONS
 config.db_handling = "delete"
 
-def run_controller_evolution(nde: NeuralDevelopmentalEncoding, population_list: list[Population], quiet:bool=False):    
+def run_controller_evolution(nde: NeuralDevelopmentalEncoding, control_decoder: ControllerDecoder, population_list: list[Population], quiet:bool=False):    
     """ Run evolution to optimize the controller nn weights while keeping the body fixed. """
     # Create EA steps
     ops = [
-        EAStep("evaluation", evaluate, {"nde": nde}),
+        EAStep("evaluation", evaluate, {"nde": nde, "control_decoder": control_decoder}),
         EAStep("parent_selection", parent_selection, {"mu": mu}),
         EAStep("crossover", crossover_controller, {"RNG": RNG, "lambda_": lambda_, "alpha": alpha}),
         EAStep("mutation", mutation_controller, {"mutation_probability": MUTATION_PROBABILITY}),
-        EAStep("evaluation", evaluate, {"nde": nde}),
+        EAStep("evaluation", evaluate, {"nde": nde, "control_decoder": control_decoder}),
         EAStep("survivor_selection", survivor_selection, {"mu": mu}),
     ]
 
@@ -73,10 +77,11 @@ def run_body_variation(best_controller: np.ndarray, population_list: Population)
 if __name__ == "__main__":
     population_list = [create_individual(RNG, BODY_VECTOR_SIZE, CONTROLLER_VECTOR_SIZE) for _ in range(lambda_)]
     nde = NeuralDevelopmentalEncoding(number_of_modules=NUM_OF_MODULES)
+    control_decoder = ControllerDecoder(LATENT_SIZE, NUM_OF_MODULES)
     
     for i in range(N_ITERATIONS):
         print(f"--- Iteration {i+1}/{N_ITERATIONS} ---")
-        best_controller, best_body = run_controller_evolution(nde)
+        best_controller, best_body = run_controller_evolution(nde, control_decoder, population_list, quiet=False)
         population_list = run_body_variation(best_controller, population_list)
             
     

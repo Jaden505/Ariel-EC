@@ -7,17 +7,13 @@ from ariel.ec.a005 import Crossover
 type Population = list[Individual]
 
 # --- CREATE ---
-def create_individual(RNG: np.random.Generator, body_vector_length: int, 
-                      controller_vector_length: int) -> Individual:
+def create_individual(RNG: np.random.Generator, 
+                        body_vector_size: tuple[int], 
+                        controller_vector_size: tuple[int]
+                      ) -> Individual:
     
-    genotype_body = [
-        RNG.uniform(0, 1, size=body_vector_length).astype(np.float32).tolist()
-        for _ in range(3)
-    ]
-    genotype_controller = [
-        RNG.uniform(0, 1, size=controller_vector_length).astype(np.float32).tolist()
-        for _ in range(3)
-    ]
+    genotype_body = RNG.uniform(0, 1, size=body_vector_size).astype(np.float32).tolist()
+    genotype_controller = RNG.uniform(-1, 1, size=controller_vector_size).astype(np.float32).tolist()
     
     ind = Individual()
     ind.genotype = {'body': genotype_body, 'controller': genotype_controller}
