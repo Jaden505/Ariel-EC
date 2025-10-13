@@ -70,7 +70,7 @@ def nn_controller(
     control_genotype: list[list[float]], # weights
     control_decoder: ControllerDecoder,
 ) -> npt.NDArray[np.float64]:
-    w1, w2, w3 = control_decoder.decode(control_genotype, input_size=len(data.qpos), output_size=model.nu)
+    w1, w2, w3 = control_decoder.forward(control_genotype, input_size=len(data.qpos), output_size=model.nu)
     
     inputs = data.qpos
     layer1 = np.tanh(np.dot(inputs, w1))
